@@ -2,10 +2,44 @@ use miette::{Diagnostic, Error, LabeledSpan, SourceSpan};
 use std::{borrow::Cow, fmt};
 use thiserror::Error;
 
+/// Ошибка, возникающая при попытке прочитать токен,
+/// когда вход закончился.
+/// 
+/// Эта ошибка используется лексером в ситуациях,
+/// когда ожидается ещё один символ или токен, но
+/// входная строка достигла конца.
+///
+/// # Пример
+/// ```rust
+/// # use your_crate::Eof;
+/// let err = Eof;
+/// assert_eq!(format!("{err}"), "Unexpected EOF");
+/// ```
 #[derive(Diagnostic, Debug, Error)]
 #[error("Unexpected EOF")]
 pub struct Eof;
 
+/// Ошибка, возникающая при встрече неизвестного символа в лексере.
+///
+/// Эта ошибка генерируется, когда лексер не может классифицировать
+/// символ ни как ключевое слово, ни как оператор, ни как часть числа
+/// или идентификатора.
+///
+/// # Поля
+/// - `src` — исходный полный код (для miette отчёта)
+/// - `token` — сам некорректный символ
+/// - `err_span` — позиция символа в тексте
+///
+/// # Пример
+/// ```rust
+/// # use your_crate::SingleTokenError;
+/// let err = SingleTokenError {
+///     src: "()$".into(),
+///     token: '$',
+///     err_span: (2..3).into(),
+/// };
+/// assert!(err.to_string().contains("Unexpected token"));
+/// ```
 #[derive(Diagnostic, Debug, Error)]
 #[error("Unexpected token '{token}'")]
 pub struct SingleTokenError {
@@ -25,6 +59,20 @@ impl SingleTokenError {
     }
 }
 
+/// Ошибка незавершённой строковой литералы.
+///
+/// Возникает, когда лексер встретил открывающую кавычку `"`,
+/// но до конца файла не нашёл закрывающей.
+///
+/// # Пример
+/// ```rust
+/// # use your_crate::StringTerminationError;
+/// let err = StringTerminationError {
+///     src: "\"unterminated".into(),
+///     err_span: (0..12).into(),
+/// };
+/// assert!(err.to_string().contains("Unterminated string"));
+/// ```
 #[derive(Diagnostic, Debug, Error)]
 #[error("Unterminated string")]
 pub struct StringTerminationError {
@@ -42,6 +90,15 @@ impl StringTerminationError {
     }
 }
 
+/// Токен, порождённый лексером.
+///
+/// Содержит:
+/// - `origin` — подстроку исходного текста, из которой был получен токен
+/// - `offset` — байтовую позицию токена в исходном тексте
+/// - `kind` — тип токена (`TokenKind`)
+///
+/// Этот тип является простым контейнером данных и также реализует
+/// `Display` для вывода в формате, совместимом с тестами Codecrafters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token<'de> {
     pub origin: &'de str,
@@ -49,6 +106,13 @@ pub struct Token<'de> {
     pub kind: TokenKind,
 }
 
+/// Перечисление всех возможных токенов языка Lox.
+///
+/// Включает односивольные и составные операторы,
+/// ключевые слова, идентификаторы, строки и числа.
+///
+/// Каждому токену соответствует конкретная лексема в тексте.
+/// Например, `TokenKind::Plus` соответствует символу `'+'`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenKind {
     LeftParen,
@@ -152,6 +216,32 @@ impl Token<'_> {
     }
 }
 
+/// Лексер — преобразует входную строку в поток токенов.
+///
+/// Реализует `Iterator<Item = Result<Token, miette::Error>>`,
+/// что позволяет использовать его в цикле `for`.
+///
+/// Лексер корректно обрабатывает:
+/// - односивольные операторы: `(`, `)`, `{`, `}`, `+`, `*`, `/` и т.д.
+/// - составные операторы: `==`, `!=`, `<=`, `>=`
+/// - комментарии `//`
+/// - ключевые слова
+/// - литералы: строки, числа
+///
+/// В случае ошибки генерируются `SingleTokenError`
+/// или `StringTerminationError`.
+///
+/// # Пример
+///
+/// ```rust
+/// use your_crate::Lexer;
+///
+/// let mut lexer = Lexer::new("var x = 10;");
+///
+/// while let Some(token) = lexer.next() {
+///     println!("{:?}", token);
+/// }
+/// ```
 pub struct Lexer<'de> {
     whole: &'de str,
     rest: &'de str,
@@ -171,6 +261,15 @@ impl<'de> Lexer<'de> {
 }
 
 impl<'de> Lexer<'de> {
+    /// Считывает следующий токен и проверяет,
+    /// что его тип соответствует `expected`.
+    ///
+    /// Если тип не совпадает — генерирует miette-ошибку.
+    ///
+    /// # Ошибки
+    /// - `Eof` — если вход закончился
+    /// - `SingleTokenError` — если токен некорректный
+    /// - `Diagnostic` — если встретился другой токен
     pub fn expect(
         &mut self,
         expected: TokenKind,
@@ -179,6 +278,10 @@ impl<'de> Lexer<'de> {
         self.expect_where(|next| next.kind == expected, unexpected)
     }
 
+    /// Общая версия `expect`: принимает произвольный предикат.
+    ///
+    /// Удобно для проверки чисел, идентификаторов, строк и любого
+    /// набора вариантов.
     pub fn expect_where(
         &mut self,
         mut check: impl FnMut(&Token<'de>) -> bool,
@@ -212,7 +315,19 @@ impl<'de> Lexer<'de> {
 impl<'de> Iterator for Lexer<'de> {
     type Item = Result<Token<'de>, Error>;
 
-    /// Once the iterator returns `Err`, it will only return `None`.
+    /// Возвращает следующий токен или ошибку.
+    ///
+    /// Поведение:
+    /// - если был lookahead через `peek`, он возвращается.
+    /// - пропускает пробелы
+    /// - пропускает комментарии `//…`
+    /// - при первой ошибке возвращает `Err` и больше **никогда**
+    ///   не генерирует токенов (возвращает `None`).
+    ///
+    /// # Ошибки
+    /// - `SingleTokenError` — если встретился неизвестный символ
+    /// - `StringTerminationError` — если строка не завершена
+    /// - диагностические ошибки miette для чисел
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next) = self.peeked.take() {
             return Some(next);

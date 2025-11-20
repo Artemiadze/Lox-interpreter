@@ -49,3 +49,14 @@ Note: This section is for stages 2 and beyond.
    the first time you run it. Subsequent runs will be fast.
 3. Commit your changes and run `git push origin master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
+
+# How to compile
+
+1. To tokenize characters in Lex file enter to command line:
+```bash
+cargo run tokenize example.lox
+```
+
+# Help
+
+Enter to command line `cargo doc --open` for opening documentaion of project.
