@@ -1,4 +1,3 @@
-use std::env;
 use std::fs;
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
@@ -52,6 +51,10 @@ fn main() -> miette::Result<()>{
                 println!("{token}");
             }
             println!("EOF  null");
+
+            if any_cc_err {
+                std::process::exit(65);
+            }
         }
     }
     Ok(())
