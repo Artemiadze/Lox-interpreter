@@ -1,0 +1,7 @@
+if ((a.foo)(true, 42, "hello banana" + "also")) {
+    print (a + b * c / d)
+} else {
+    if (foo + (42 / 2)){
+        return false
+    }
+}

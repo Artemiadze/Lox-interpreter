@@ -980,25 +980,23 @@ impl fmt::Display for Atom<'_> {
     /// Используется в pretty-printing AST и при выводе ошибок.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            // NOTE: this feels more correct:
-            // Atom::String(s) => write!(f, "\"{s}\""),
-            Atom::String(s) => write!(f, "{s}"),
+            Atom::String(s) => write!(f, "\"{s}\""), // ← фикс: строки всегда в кавычках
             Atom::Number(n) => {
                 if *n == n.trunc() {
-                    // tests require that integers are printed as N.0
                     write!(f, "{n}.0")
                 } else {
                     write!(f, "{n}")
                 }
             }
             Atom::Nil => write!(f, "nil"),
-            Atom::Bool(b) => write!(f, "{b:?}"),
+            Atom::Bool(b) => write!(f, "{b}"),
             Atom::Ident(i) => write!(f, "{i}"),
             Atom::Super => write!(f, "super"),
             Atom::This => write!(f, "this"),
         }
     }
 }
+
 
 /// Операторы языка и специальные псевдо-операторы.
 /// 
@@ -1043,34 +1041,31 @@ impl fmt::Display for Operator {
     /// Человекочитаемый вывод оператора.
     /// Используется в pretty-printing AST и сообщениях об ошибках.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Operator::Minus => "-",
-                Operator::Plus => "+",
-                Operator::Star => "*",
-                Operator::BangEqual => "!=",
-                Operator::EqualEqual => "==",
-                Operator::LessEqual => "<=",
-                Operator::GreaterEqual => ">=",
-                Operator::Less => "<",
-                Operator::Greater => ">",
-                Operator::Slash => "/",
-                Operator::Bang => "!",
-                Operator::And => "and",
-                Operator::Or => "or",
-                Operator::For => "for",
-                Operator::Class => "class",
-                Operator::Print => "print",
-                Operator::Return => "return",
-                Operator::Field => ".",
-                Operator::Var => "var",
-                Operator::While => "while",
-                Operator::Call => "call",
-                Operator::Group => "group",
-            }
-        )
+        let s = match self {
+            Operator::Minus         => "-",
+            Operator::Plus          => "+",
+            Operator::Star          => "*",
+            Operator::Slash         => "/",
+            Operator::Bang          => "!",
+            Operator::BangEqual     => "!=",
+            Operator::EqualEqual    => "==",
+            Operator::Less          => "<",
+            Operator::LessEqual     => "<=",
+            Operator::Greater       => ">",
+            Operator::GreaterEqual  => ">=",
+            Operator::And           => "and",
+            Operator::Or            => "or",
+            Operator::Call          => "call",
+            Operator::For           => "for",
+            Operator::Class         => "class",
+            Operator::Print         => "print",
+            Operator::Return        => "return",
+            Operator::Field         => ".",
+            Operator::Var           => "var",
+            Operator::While         => "while",
+            Operator::Group         => "group",
+        };
+        write!(f, "{s}")
     }
 }
 
@@ -1099,41 +1094,42 @@ pub enum TokenTree<'de> {
         no: Option<Box<TokenTree<'de>>>,
     },
 }
-
 impl fmt::Display for TokenTree<'_> {
     /// Лиспоподобный вывод AST — удобный для тестов и логгирования
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenTree::Atom(i) => write!(f, "{}", i),
-            TokenTree::Cons(head, rest) => {
+
+            TokenTree::Atom(a) => write!(f, "{a}"),
+
+            TokenTree::Cons(head, tail) => {
                 write!(f, "({}", head)?;
-                for s in rest {
-                    write!(f, " {s}")?
+                for item in tail {
+                    write!(f, " {item}")?;
                 }
                 write!(f, ")")
             }
-            TokenTree::Fun {
-                name,
-                parameters,
-                body,
-            } => {
-                write!(f, "(def {name}")?;
-                for p in parameters {
-                    write!(f, " {p}")?
+
+            TokenTree::Fun { name, parameters, body } => {
+                write!(f, "(fun {name} (")?;
+                for (i, p) in parameters.iter().enumerate() {
+                    if i > 0 { write!(f, " ")? }
+                    write!(f, "{p}")?;
                 }
-                write!(f, " {body})")
+                write!(f, ") {body})")
             }
+
             TokenTree::Call { callee, arguments } => {
-                write!(f, "({callee}")?;
+                write!(f, "(call {callee}")?;
                 for a in arguments {
-                    write!(f, " {a}")?
+                    write!(f, " {a}")?;
                 }
                 write!(f, ")")
             }
+
             TokenTree::If { condition, yes, no } => {
                 write!(f, "(if {condition} {yes}")?;
                 if let Some(no) = no {
-                    write!(f, " {no}")?
+                    write!(f, " {no}")?;
                 }
                 write!(f, ")")
             }
